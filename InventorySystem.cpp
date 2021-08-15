@@ -14,13 +14,13 @@ class Player;
 // item IDS
 enum Items
 {
-    // we use this shit so its more easy to find empty spaces with only 1 method, excellent right? ;)
+    // I use this shit so its more easy to find empty spaces with only 1 method, excellent right? ;)
     ITEM_NONE  = 0,
     ITEM_APPLE = 1,
     ITEM_PEAR  = 2
 };
 
-// we should expand this...
+// I should expand this...
 class Item
 { 
     public:
@@ -29,6 +29,11 @@ class Item
         {
             _name = it._name;
             _id = it._id;
+        }
+        Item()
+        {
+            _id = ITEM_NONE;
+            _name = "Empty";
         }
         
         int getId() { return _id; }
@@ -45,7 +50,7 @@ class InventorySlot
     public:
         InventorySlot() 
         { 
-            _item = nullptr;
+            _item = new Item;
             _stack = 0; 
         }
         
@@ -60,6 +65,7 @@ class InventorySlot
         int getStack() { return _stack; }
         void setItem(Item* it) { _item = it; }
         void setStack(int newStack) { _stack = newStack; } 
+        void reset() { _item = new Item; _stack = 0; }
         
     protected:
         Item* _item;
@@ -76,12 +82,21 @@ class Inventory
         Inventory(Player* owner) 
         {
             _owner = owner;
+            _emptySlots = 0;
+            
+            for(int i=0;i<MAX_SLOTS;i++)
+            {
+                InventorySlot* slot = new InventorySlot();
+                slots.push_back(slot);
+                _emptySlots++;
+            }
         }
         
         ~Inventory() 
         {
             for(int i=0;i<(int)slots.size();i++)
             {
+                // crash check, I'm not really sure if this can happen tho
                 if (slots[i] != nullptr)
                     delete slots[i]->getItem();
                 delete slots[i];
@@ -89,7 +104,7 @@ class Inventory
             slots.clear();
         }
         
-        bool hasFreeSlots() { return MAX_SLOTS - slots.size() > 0; }
+        bool hasFreeSlots() { return _emptySlots != 0; }
         
         bool addItem(Item* it, int quant) 
         {
@@ -107,9 +122,12 @@ class Inventory
                     
                     // make a new item per loop
                     Item* newItem = new Item(*it);
-                    InventorySlot* invSlot = new InventorySlot(newItem, SLOT_MAX_STACK);
+                    int emptySlot = findNextEmptySlot();
                     quant -= SLOT_MAX_STACK;
-                    slots.push_back(invSlot);
+                    // no safe check as it shouldn't be null
+                    slots[emptySlot]->setItem(newItem);
+                    slots[emptySlot]->setStack(SLOT_MAX_STACK);
+                    _emptySlots--;
                 }
                 
                 if (quant > 0)
@@ -118,8 +136,10 @@ class Inventory
                     if (!hasFreeSlots())
                         return false;
                     Item* newItem = new Item(*it);
-                    InventorySlot* invSlot = new InventorySlot(newItem, quant);
-                    slots.push_back(invSlot);
+                    int emptySlot = findNextEmptySlot();
+                    slots[emptySlot]->setItem(newItem);
+                    slots[emptySlot]->setStack(quant);
+                    _emptySlots--;
                 }
                 
                 return true;
@@ -145,10 +165,11 @@ class Inventory
                         if (!hasFreeSlots())
                             return false;
                         Item* newItem = new Item(*it);
-                        InventorySlot* invSlot = new InventorySlot(newItem, SLOT_MAX_STACK);
+                        int emptySlot = findNextEmptySlot();
+                        slots[emptySlot]->setItem(newItem);
+                        slots[emptySlot]->setStack(SLOT_MAX_STACK);
                         quant -= SLOT_MAX_STACK;
-                        
-                        slots.push_back(invSlot);
+                        _emptySlots--;
                     }
                     
                     // add the rest, and also check for free slots
@@ -157,8 +178,10 @@ class Inventory
                         if (!hasFreeSlots())
                             return false;
                         Item* newItem = new Item(*it);
-                        InventorySlot* invSlot = new InventorySlot(newItem, quant);
-                        slots.push_back(invSlot);
+                        int emptySlot = findNextEmptySlot();
+                        slots[emptySlot]->setItem(newItem);
+                        slots[emptySlot]->setStack(quant);
+                        _emptySlots--;
                     }
                     
                     return true;
@@ -184,12 +207,16 @@ class Inventory
                 slots[result.first]->setStack(slots[result.first]->getStack()-quant);
                 
                 if (slots[result.first]->getStack() == 0)
-                    slots.erase(slots.begin() + result.first);
+                {
+                    slots[result.first]->reset();
+                    _emptySlots++;
+                }
             }
             else
             {
                 quant -= slots[result.first]->getStack();
-                slots.erase(slots.begin() + result.first);
+                slots[result.first]->reset();
+                _emptySlots++;
                 
                 // now we should iterate until quant == 0, each time we call findInventorySlotWithItem
                 while (quant != 0)
@@ -209,7 +236,10 @@ class Inventory
                         }
                         
                         if (slots[result.first]->getStack() == 0)
-                            slots.erase(slots.begin()+result.first);
+                        {
+                            slots[result.first]->reset();
+                            _emptySlots++;
+                        }
                     }
                 }
                 
@@ -228,10 +258,11 @@ class Inventory
         
         void showInventory()
         {
-            for(int i=0;i<(int)slots.size();i++)
+            for(int i=0;i<MAX_SLOTS;i++)
             {
-                if (slots[i]->getItem() == nullptr)
+                if (slots[i]->getItem()->getId() == ITEM_NONE)
                     continue;
+                
                 std::cout << "Slot: " << i << ", item: " << slots[i]->getItem()->getName() << ", quant: " << slots[i]->getStack() << std::endl;
             }
             std::cout << "End of player inventory" << std::endl;
@@ -240,6 +271,8 @@ class Inventory
     protected:
         Player* _owner;
         std::vector<InventorySlot*> slots;
+        // optimization purposes
+        int _emptySlots;
         
         searchResult findInventorySlotWithItem(Item* it) 
         {
@@ -247,15 +280,30 @@ class Inventory
             if (it == nullptr)
                 return result;
             
-            for(int i=0;i<(int)slots.size();i++) 
+            for(int i=0;i<MAX_SLOTS;i++) 
             { 
                 auto item = slots[i]->getItem();
-                if (item == nullptr)
-                    continue;
                 if (item->getId() == it->getId())
                 {
                     result.first = i;
                     result.second = true;
+                }
+            }
+            
+            return result;
+        }
+        
+        // free slots
+        int findNextEmptySlot()
+        {
+            int result = -1;            
+            for(int i=0;i<MAX_SLOTS;i++) 
+            { 
+                auto item = slots[i]->getItem();
+                if (item->getId() == ITEM_NONE)
+                {
+                    result = i;
+                    break;
                 }
             }
             
@@ -297,13 +345,12 @@ int main(int argc, char *argv[]) {
     std::cout << pl->sayHi() << std::endl;
     Item* apple = new Item("Apple", ITEM_APPLE);
     Item* pear = new Item("Pear", ITEM_PEAR);
-    pl->addItemToInventory(apple, 100);
+    pl->addItemToInventory(apple, 154);
     pl->addItemToInventory(pear, 157);
-    pl->addItemToInventory(apple, 500);
     
     pl->showInventory();
-    pl->addItemToInventory(pear, 110);
-    
+    pl->removeItemFromInventory(pear, 113);
+    pl->removeItemFromInventory(apple, 94);
     
     pl->showInventory();
     
