@@ -1,3 +1,5 @@
+/// Authored by Nefertumm (github.com/Nefertumm) under MIT License. This message should not be removed.
+
 #include <iostream>
 #include <string>
 #include <vector>
